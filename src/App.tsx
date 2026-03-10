@@ -90,6 +90,10 @@ export default function App() {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (file) {
+      if (file.size > 15 * 1024 * 1024) {
+        setError("Ukuran file terlalu besar (Maksimal 15MB untuk HP). Silakan gunakan video yang lebih pendek atau gunakan fitur 'Link Video' di atas.");
+        return;
+      }
       setVideoFile(file);
       setVideoUrl('');
       setVideoPreview(URL.createObjectURL(file));
@@ -125,6 +129,9 @@ export default function App() {
       const contents: any[] = [];
 
       if (videoFile) {
+        if (videoFile.size > 15 * 1024 * 1024) {
+          throw new Error("File melebihi batas 15MB. Gunakan link video untuk file besar.");
+        }
         const base64Video = await fileToBase64(videoFile);
         contents.push({
           inlineData: {
@@ -377,10 +384,15 @@ export default function App() {
                       className="w-full h-full object-cover"
                       controls
                     />
-                    <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-4 left-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <div className="bg-black/80 backdrop-blur px-3 py-1.5 rounded-full text-[10px] font-mono text-white flex items-center gap-2">
-                        <Upload className="w-3 h-3" /> CHANGE SOURCE
+                        <Upload className="w-3 h-3" /> GANTI VIDEO
                       </div>
+                      {videoFile && (
+                        <div className="bg-emerald-500/80 backdrop-blur px-3 py-1.5 rounded-full text-[10px] font-mono text-black font-bold">
+                          {(videoFile.size / (1024 * 1024)).toFixed(1)} MB
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
