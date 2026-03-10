@@ -49,6 +49,7 @@ interface SceneAnalysis {
   changeType: string;
   indonesianTranslation: string;
   transformationPrompt?: string;
+  transformationIndonesianTranslation?: string;
 }
 
 interface AnalysisResult {
@@ -152,6 +153,7 @@ export default function App() {
         4. The type of change (e.g., "Initial State", "Transformation", "Final Result").
         5. A natural Indonesian translation of the image prompt.
         6. For all scenes except the last one, provide an "image-to-video" transformation prompt that describes the visual transition from this scene to the next. Focus specifically on exterior/interior architectural changes and the activity/presence of workers (pekerja) during the transformation.
+        7. Provide a natural Indonesian translation of the transformation prompt.
         
         Return the result in JSON format.`
       });
@@ -177,7 +179,8 @@ export default function App() {
                     imagePrompt: { type: Type.STRING },
                     changeType: { type: Type.STRING },
                     indonesianTranslation: { type: Type.STRING },
-                    transformationPrompt: { type: Type.STRING, description: "Prompt for image-to-video transition to the next scene" }
+                    transformationPrompt: { type: Type.STRING, description: "Prompt for image-to-video transition to the next scene" },
+                    transformationIndonesianTranslation: { type: Type.STRING, description: "Indonesian translation of the transformation prompt" }
                   },
                   required: ["timestamp", "description", "imagePrompt", "changeType", "indonesianTranslation"]
                 }
@@ -202,6 +205,13 @@ export default function App() {
     if (!result) return;
     const newScenes = [...result.scenes];
     newScenes[index] = { ...newScenes[index], indonesianTranslation: value };
+    setResult({ ...result, scenes: newScenes });
+  };
+
+  const handleTransformationTranslationChange = (index: number, value: string) => {
+    if (!result) return;
+    const newScenes = [...result.scenes];
+    newScenes[index] = { ...newScenes[index], transformationIndonesianTranslation: value };
     setResult({ ...result, scenes: newScenes });
   };
 
@@ -555,6 +565,18 @@ export default function App() {
                                     <p className="text-[11px] text-zinc-400 italic leading-relaxed pr-8">
                                       "{scene.transformationPrompt}"
                                     </p>
+                                    
+                                    <div className="mt-3 space-y-2">
+                                      <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500 uppercase">
+                                        <Languages className="w-2.5 h-2.5" /> Terjemahan Transformasi (Bisa Diedit)
+                                      </div>
+                                      <textarea
+                                        value={scene.transformationIndonesianTranslation || ''}
+                                        onChange={(e) => handleTransformationTranslationChange(idx, e.target.value)}
+                                        className="w-full bg-black/40 border border-zinc-800 rounded p-2 text-[10px] text-zinc-400 focus:outline-none focus:border-emerald-500/30 transition-colors resize-none min-h-[50px]"
+                                        placeholder="Terjemahan transformasi..."
+                                      />
+                                    </div>
                                   </div>
                                   <button 
                                     onClick={() => handleCopy(scene.transformationPrompt!, idx + 100)}
