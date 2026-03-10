@@ -1,0 +1,5 @@
+{
+  "name": "VidiLapse: Video Scene Analyzer",
+  "description": "Analyze videos to generate timelapse scene progressions and before/after prompts using AI.",
+  "requestFramePermissions": []
+}
