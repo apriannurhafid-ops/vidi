@@ -110,13 +110,13 @@ export default function App() {
 
   const handleAnalyze = async () => {
     if (!videoFile && !videoUrl) {
-      setError("Please upload a video or provide a Facebook/YouTube link.");
+      setError("Silakan unggah video atau masukkan link Facebook/YouTube terlebih dahulu.");
       return;
     }
 
-    const apiKey = userApiKey || import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = (userApiKey || import.meta.env.VITE_GEMINI_API_KEY || "").trim();
     if (!apiKey) {
-      setError("API Key is missing. Please provide your own Gemini API Key in the settings below.");
+      setError("API Key belum diisi. Silakan masukkan API Key Gemini Anda di kolom pengaturan di atas.");
       return;
     }
 
@@ -135,7 +135,7 @@ export default function App() {
         const base64Video = await fileToBase64(videoFile);
         contents.push({
           inlineData: {
-            mimeType: videoFile.type,
+            mimeType: videoFile.type || "video/mp4",
             data: base64Video
           }
         });
@@ -162,11 +162,13 @@ export default function App() {
         6. For all scenes except the last one, provide an "image-to-video" transformation prompt that describes the visual transition from this scene to the next. Focus specifically on exterior/interior architectural changes and the activity/presence of workers (pekerja) during the transformation.
         7. Provide a natural Indonesian translation of the transformation prompt.
         
+        PENTING: Berikan 'title' dan 'summary' dalam Bahasa Indonesia.
+        
         Return the result in JSON format.`
       });
       
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-pro-preview",
         contents,
         config: {
           tools: videoUrl ? [{ googleSearch: {} }] : undefined,
@@ -198,11 +200,31 @@ export default function App() {
         }
       });
 
-      const parsedResult = JSON.parse(response.text || "{}") as AnalysisResult;
+      if (!response.text) {
+        throw new Error("AI tidak memberikan respon. Coba gunakan video lain atau durasi yang lebih pendek.");
+      }
+
+      const parsedResult = JSON.parse(response.text) as AnalysisResult;
       setResult(parsedResult);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to analyze video. Please ensure the file is not too large and try again.");
+      const errorMessage = err?.message || "";
+      
+      if (errorMessage.includes("API_KEY_INVALID") || 
+          errorMessage.includes("403") || 
+          errorMessage.includes("401") || 
+          errorMessage.includes("unauthenticated") ||
+          errorMessage.includes("API key not found")) {
+        setError("⚠️ API Key Anda tidak valid atau sudah kedaluwarsa. Pastikan Anda menggunakan API Key dari Google AI Studio (Gemini).");
+      } else if (errorMessage.includes("SAFETY")) {
+        setError("⚠️ Video ditolak oleh sistem keamanan AI. Pastikan video tidak mengandung konten sensitif.");
+      } else if (errorMessage.includes("quota") || errorMessage.includes("429")) {
+        setError("⚠️ Kuota API Key Anda habis (Rate Limit). Silakan tunggu beberapa menit atau gunakan API Key lain.");
+      } else if (errorMessage.includes("File melebihi batas 15MB")) {
+        setError(errorMessage);
+      } else {
+        setError("Terjadi kesalahan teknis. Tips: Coba gunakan video yang lebih pendek (10-20 detik) atau gunakan fitur 'Link Video' untuk stabilitas lebih baik.");
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -300,7 +322,7 @@ export default function App() {
             </div>
 
             <div className="glass-panel px-4 py-2 flex items-center gap-4 self-end">
-              <span className="text-xs font-mono text-zinc-500 uppercase">Target Clips</span>
+              <span className="text-xs font-mono text-zinc-500 uppercase">Jumlah Klip</span>
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => setClipCount(Math.max(2, clipCount - 1))}
@@ -364,7 +386,7 @@ export default function App() {
 
             <section className="space-y-4">
               <h2 className="text-sm font-mono text-zinc-500 uppercase flex items-center gap-2">
-                <Video className="w-4 h-4" /> Source Reference
+                <Video className="w-4 h-4" /> Referensi Sumber
               </h2>
               
               <div 
@@ -401,8 +423,8 @@ export default function App() {
                       <Upload className="w-8 h-8 text-zinc-400" />
                     </div>
                     <div>
-                      <p className="text-zinc-200 font-medium">Drop reference video here</p>
-                      <p className="text-zinc-500 text-sm mt-1">MP4, MOV or WebM supported</p>
+                      <p className="text-zinc-200 font-medium">Letakkan video referensi di sini</p>
+                      <p className="text-zinc-500 text-sm mt-1">Format MP4, MOV atau WebM didukung</p>
                     </div>
                   </div>
                 )}
@@ -412,7 +434,7 @@ export default function App() {
             {/* Analysis Mode Selector */}
             <section className="space-y-4">
               <h2 className="text-sm font-mono text-zinc-500 uppercase flex items-center gap-2">
-                <Settings2 className="w-4 h-4" /> Analysis Mode
+                <Settings2 className="w-4 h-4" /> Mode Analisis
               </h2>
               <div className="grid grid-cols-3 gap-2">
                 {(['normal', 'semi-timelapse', 'timelapse'] as const).map((mode) => (
@@ -446,12 +468,12 @@ export default function App() {
               {isAnalyzing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Analyzing Temporal Data...
+                  Menganalisis Data Temporal...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-5 h-5" />
-                  Generate Scene Sequence
+                  Hasilkan Urutan Adegan
                 </>
               )}
             </button>
@@ -481,7 +503,7 @@ export default function App() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-xs font-mono text-zinc-500 uppercase flex items-center gap-2">
-                        <LayoutGrid className="w-4 h-4" /> Progression Sequence
+                        <LayoutGrid className="w-4 h-4" /> Urutan Progresi
                       </h3>
                       <div className="flex gap-2">
                          <div className="px-2 py-1 rounded bg-zinc-800 text-[10px] font-mono text-zinc-400">
@@ -611,9 +633,9 @@ export default function App() {
                   <div className="w-16 h-16 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-6">
                     <SplitSquareVertical className="w-8 h-8 text-zinc-700" />
                   </div>
-                  <h3 className="text-zinc-400 font-medium">Analysis Pending</h3>
+                  <h3 className="text-zinc-400 font-medium">Menunggu Analisis</h3>
                   <p className="text-zinc-600 text-sm mt-2 max-w-xs">
-                    Upload a video and configure the clip count to generate your temporal progression analysis.
+                    Unggah video dan atur jumlah klip untuk menghasilkan analisis progresi temporal Anda.
                   </p>
                 </div>
               )}
