@@ -186,8 +186,8 @@ export default function App() {
         3. A highly detailed text-to-image prompt that would recreate this specific scene visually, focusing on the visual evolution.
         4. The type of change (e.g., "Initial State", "Transformation", "Final Result").
         5. A natural Indonesian translation of the image prompt.
-        6. For all scenes except the last one, provide a concise but highly detailed "image-to-video" transformation prompt (max 30-40 words) describing the visual transition to the next scene. Focus on key architectural evolutions and worker activity.
-        7. Provide a natural Indonesian translation of the transformation prompt.
+        6. For all scenes except the last one, provide a VERY CONCISE "image-to-video" transformation prompt (STRICTLY max 15-20 words). Focus only on the most critical visual change and worker activity.
+        7. Provide a natural Indonesian translation of the transformation prompt (also strictly concise).
         
         PENTING: Berikan 'title' dan 'summary' dalam Bahasa Indonesia.
         
@@ -195,7 +195,7 @@ export default function App() {
       });
       
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3-flash-preview",
         contents,
         config: {
           tools: videoUrl ? [{ googleSearch: {} }] : undefined,
@@ -253,7 +253,7 @@ export default function App() {
       } else if (errorMessage.includes("SAFETY")) {
         setError("⚠️ Video ditolak oleh sistem keamanan AI. Pastikan video tidak mengandung konten sensitif.");
       } else if (errorMessage.includes("quota") || errorMessage.includes("429")) {
-        setError("⚠️ Kuota API Key Anda habis (Rate Limit). Silakan tunggu beberapa menit atau gunakan API Key lain.");
+        setError("⚠️ Batas penggunaan API tercapai (Rate Limit). Hal ini sering terjadi pada API Key gratis. Silakan tunggu 1-2 menit atau gunakan API Key lain.");
       } else if (errorMessage.includes("File melebihi batas 15MB")) {
         setError(errorMessage);
       } else {
@@ -641,38 +641,38 @@ export default function App() {
                                   </span>
                                 </div>
                                 
-                                <div className="space-y-4">
-                                  <div className="space-y-2">
-                                    <p className="text-zinc-200 text-sm font-medium">{scene.description}</p>
-                                    <div className="bg-black/40 rounded-lg p-4 border border-zinc-800 group-hover:border-zinc-700 transition-colors relative">
-                                      <div className="flex items-start gap-3">
-                                        <ImageIcon className="w-4 h-4 text-zinc-500 mt-1 flex-shrink-0" />
-                                        <p className="text-zinc-400 text-xs italic leading-relaxed pr-8">
-                                          "{scene.imagePrompt}"
-                                        </p>
+                                  <div className="space-y-4">
+                                    <div className="space-y-2">
+                                      <p className="text-zinc-200 text-sm font-medium leading-snug">{scene.description}</p>
+                                      <div className="bg-black/40 rounded-lg p-3 border border-zinc-800 group-hover:border-zinc-700 transition-colors relative">
+                                        <div className="flex items-start gap-3">
+                                          <ImageIcon className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                                          <p className="text-zinc-400 text-[11px] italic leading-relaxed pr-8">
+                                            "{scene.imagePrompt}"
+                                          </p>
+                                        </div>
+                                        <button 
+                                          onClick={() => handleCopy(scene.imagePrompt, idx)}
+                                          className="absolute top-3 right-3 text-zinc-500 hover:text-emerald-400 transition-colors"
+                                          title="Copy Prompt"
+                                        >
+                                          {copiedIndex === idx ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                        </button>
                                       </div>
-                                      <button 
-                                        onClick={() => handleCopy(scene.imagePrompt, idx)}
-                                        className="absolute top-4 right-4 text-zinc-500 hover:text-emerald-400 transition-colors"
-                                        title="Copy Prompt"
-                                      >
-                                        {copiedIndex === idx ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                      </button>
                                     </div>
-                                  </div>
 
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 uppercase">
-                                      <Languages className="w-3 h-3" /> Terjemahan (Bisa Diedit)
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500 uppercase">
+                                        <Languages className="w-2.5 h-2.5" /> Terjemahan
+                                      </div>
+                                      <textarea
+                                        value={scene.indonesianTranslation}
+                                        onChange={(e) => handleTranslationChange(idx, e.target.value)}
+                                        className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-2.5 text-[11px] text-zinc-300 focus:outline-none focus:border-emerald-500/50 transition-colors resize-none min-h-[50px]"
+                                        placeholder="Terjemahan bahasa Indonesia..."
+                                      />
                                     </div>
-                                    <textarea
-                                      value={scene.indonesianTranslation}
-                                      onChange={(e) => handleTranslationChange(idx, e.target.value)}
-                                      className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-300 focus:outline-none focus:border-emerald-500/50 transition-colors resize-none min-h-[60px]"
-                                      placeholder="Terjemahan bahasa Indonesia..."
-                                    />
                                   </div>
-                                </div>
                                 
                                 <div className="flex justify-end">
                                   <button 
@@ -699,20 +699,17 @@ export default function App() {
                                     <Play className="w-3 h-3 text-emerald-500 fill-emerald-500" />
                                   </div>
                                   <div className="space-y-1 flex-grow">
-                                    <span className="text-[9px] font-mono text-emerald-500 uppercase tracking-widest">Image-to-Video Transformation</span>
-                                    <p className="text-[11px] text-zinc-400 italic leading-relaxed pr-8">
+                                    <span className="text-[9px] font-mono text-emerald-500 uppercase tracking-widest">Transition Prompt</span>
+                                    <p className="text-[10px] text-zinc-400 italic leading-snug pr-8">
                                       "{scene.transformationPrompt}"
                                     </p>
                                     
-                                    <div className="mt-3 space-y-2">
-                                      <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500 uppercase">
-                                        <Languages className="w-2.5 h-2.5" /> Terjemahan Transformasi (Bisa Diedit)
-                                      </div>
+                                    <div className="mt-2">
                                       <textarea
                                         value={scene.transformationIndonesianTranslation || ''}
                                         onChange={(e) => handleTransformationTranslationChange(idx, e.target.value)}
-                                        className="w-full bg-black/40 border border-zinc-800 rounded p-2 text-[10px] text-zinc-400 focus:outline-none focus:border-emerald-500/30 transition-colors resize-none min-h-[50px]"
-                                        placeholder="Terjemahan transformasi..."
+                                        className="w-full bg-black/40 border border-zinc-800 rounded p-2 text-[10px] text-zinc-500 focus:outline-none focus:border-emerald-500/30 transition-colors resize-none min-h-[40px]"
+                                        placeholder="Terjemahan transisi..."
                                       />
                                     </div>
                                   </div>
