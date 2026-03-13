@@ -29,7 +29,8 @@ import {
   Key,
   Eye,
   EyeOff,
-  ExternalLink
+  ExternalLink,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -67,6 +68,8 @@ export default function App() {
   const [clipCount, setClipCount] = useState<number>(3);
   const [analysisMode, setAnalysisMode] = useState<'normal' | 'semi-timelapse' | 'timelapse'>('semi-timelapse');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStage, setAnalysisStage] = useState('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -121,14 +124,22 @@ export default function App() {
     }
 
     setIsAnalyzing(true);
+    setAnalysisProgress(5);
+    setAnalysisStage('Mempersiapkan mesin analisis...');
     setError(null);
 
+    let progressInterval: any;
+
     try {
+      setAnalysisProgress(15);
+      setAnalysisStage('Menginisialisasi koneksi AI...');
       const ai = new GoogleGenAI({ apiKey });
       
       const contents: any[] = [];
 
       if (videoFile) {
+        setAnalysisStage('Mengonversi video ke format AI (Base64)...');
+        setAnalysisProgress(25);
         if (videoFile.size > 15 * 1024 * 1024) {
           throw new Error("File melebihi batas 15MB. Gunakan link video untuk file besar.");
         }
@@ -139,7 +150,23 @@ export default function App() {
             data: base64Video
           }
         });
+        setAnalysisProgress(45);
+      } else {
+        setAnalysisProgress(40);
       }
+
+      setAnalysisStage('Mengirim data & menunggu respon AI...');
+      
+      // Simulate progress while waiting for AI response (from 50% to 90%)
+      let currentSimulatedProgress = 50;
+      progressInterval = setInterval(() => {
+        if (currentSimulatedProgress < 90) {
+          currentSimulatedProgress += 2;
+          setAnalysisProgress(currentSimulatedProgress);
+          if (currentSimulatedProgress > 70) setAnalysisStage('AI sedang memproses detail visual...');
+          if (currentSimulatedProgress > 85) setAnalysisStage('Hampir selesai, menyusun data...');
+        }
+      }, 1000);
 
       const modeInstructions = {
         'normal': 'Focus on standard scene transitions and narrative flow.',
@@ -159,7 +186,7 @@ export default function App() {
         3. A highly detailed text-to-image prompt that would recreate this specific scene visually, focusing on the visual evolution.
         4. The type of change (e.g., "Initial State", "Transformation", "Final Result").
         5. A natural Indonesian translation of the image prompt.
-        6. For all scenes except the last one, provide an "image-to-video" transformation prompt that describes the visual transition from this scene to the next. Focus specifically on exterior/interior architectural changes and the activity/presence of workers (pekerja) during the transformation.
+        6. For all scenes except the last one, provide a concise but highly detailed "image-to-video" transformation prompt (max 30-40 words) describing the visual transition to the next scene. Focus on key architectural evolutions and worker activity.
         7. Provide a natural Indonesian translation of the transformation prompt.
         
         PENTING: Berikan 'title' dan 'summary' dalam Bahasa Indonesia.
@@ -204,9 +231,16 @@ export default function App() {
         throw new Error("AI tidak memberikan respon. Coba gunakan video lain atau durasi yang lebih pendek.");
       }
 
+      clearInterval(progressInterval);
+      setAnalysisProgress(95);
+      setAnalysisStage('Memvalidasi hasil...');
+
       const parsedResult = JSON.parse(response.text) as AnalysisResult;
       setResult(parsedResult);
+      setAnalysisProgress(100);
+      setAnalysisStage('Selesai!');
     } catch (err: any) {
+      clearInterval(progressInterval);
       console.error(err);
       const errorMessage = err?.message || "";
       
@@ -252,6 +286,43 @@ export default function App() {
     } catch (err) {
       console.error('Failed to copy text: ', err);
     }
+  };
+
+  const handleDownload = () => {
+    if (!result) return;
+
+    let text = `HASIL ANALISIS PROGRESI TEMPORAL - VIDILAPSE\n`;
+    text += `==============================================\n\n`;
+    text += `Judul: ${result.title}\n`;
+    text += `Ringkasan: ${result.summary}\n\n`;
+    text += `URUTAN ADEGAN:\n`;
+    text += `----------------\n\n`;
+
+    result.scenes.forEach((scene, idx) => {
+      text += `ADEGAN ${idx + 1} [Timestamp: ${scene.timestamp}]\n`;
+      text += `Tipe Perubahan: ${scene.changeType}\n`;
+      text += `Deskripsi: ${scene.description}\n\n`;
+      text += `[IMAGE PROMPT]\n`;
+      text += `English: ${scene.imagePrompt}\n`;
+      text += `Indonesia: ${scene.indonesianTranslation}\n\n`;
+
+      if (scene.transformationPrompt) {
+        text += `[TRANSISI KE ADEGAN BERIKUTNYA]\n`;
+        text += `English: ${scene.transformationPrompt}\n`;
+        text += `Indonesia: ${scene.transformationIndonesianTranslation || 'N/A'}\n\n`;
+      }
+      text += `----------------------------------------------\n\n`;
+    });
+
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${result.title.replace(/\s+/g, '_')}_Prompts.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -455,9 +526,36 @@ export default function App() {
               </div>
             </section>
 
+            {isAnalyzing && (
+              <div className="space-y-4 p-6 glass-panel border-emerald-500/20 bg-emerald-500/5">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
+                    <span className="text-sm font-medium text-emerald-400 animate-pulse">
+                      {analysisStage}
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono text-emerald-500">{analysisProgress}%</span>
+                </div>
+                
+                <div className="w-full bg-zinc-800/50 rounded-full h-2 overflow-hidden border border-zinc-700/50">
+                  <motion.div 
+                    className="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${analysisProgress}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                  />
+                </div>
+                
+                <p className="text-[10px] text-zinc-500 italic text-center">
+                  Mohon tunggu, proses analisis video membutuhkan waktu 10-30 detik tergantung durasi video.
+                </p>
+              </div>
+            )}
+
             <button
               onClick={handleAnalyze}
-              disabled={(!videoFile && !videoUrl) || isAnalyzing}
+              disabled={isAnalyzing}
               className={cn(
                 "w-full py-4 rounded-xl font-bold text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all",
                 (!videoFile && !videoUrl) || isAnalyzing 
@@ -506,7 +604,13 @@ export default function App() {
                         <LayoutGrid className="w-4 h-4" /> Urutan Progresi
                       </h3>
                       <div className="flex gap-2">
-                         <div className="px-2 py-1 rounded bg-zinc-800 text-[10px] font-mono text-zinc-400">
+                         <button 
+                           onClick={handleDownload}
+                           className="flex items-center gap-2 px-3 py-1 rounded bg-emerald-500/10 text-[10px] font-mono text-emerald-500 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
+                         >
+                           <Download className="w-3 h-3" /> DOWNLOAD (.TXT)
+                         </button>
+                         <div className="px-2 py-1 rounded bg-zinc-800 text-[10px] font-mono text-zinc-400 flex items-center">
                            {result.scenes.length} KEYFRAMES
                          </div>
                       </div>
