@@ -32,7 +32,10 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
-  Download
+  Download,
+  RefreshCw,
+  Maximize2,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -79,7 +82,9 @@ export default function App() {
   const [textReference, setTextReference] = useState<string>(''); // Keep for backward compatibility if needed
   const [generatedImages, setGeneratedImages] = useState<Record<number, string>>({});
   const [generatingImageIndex, setGeneratingImageIndex] = useState<number | null>(null);
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [imageAspectRatio, setImageAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   
   // Usage Tracking States
   const [usageStats, setUsageStats] = useState({
@@ -92,11 +97,16 @@ export default function App() {
   // API Key States
   const [userApiKey, setUserApiKey] = useState<string>('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [imageApiKey, setImageApiKey] = useState<string>('');
+  const [showImageApiKey, setShowImageApiKey] = useState(false);
 
   // Load API Key and Usage Stats from localStorage on mount
   React.useEffect(() => {
     const savedKey = localStorage.getItem('gemini_user_api_key');
     if (savedKey) setUserApiKey(savedKey);
+
+    const savedImageKey = localStorage.getItem('gemini_image_api_key');
+    if (savedImageKey) setImageApiKey(savedImageKey);
 
     const savedStats = localStorage.getItem('gemini_usage_stats');
     if (savedStats) {
@@ -128,6 +138,11 @@ export default function App() {
   const handleApiKeyChange = (val: string) => {
     setUserApiKey(val);
     localStorage.setItem('gemini_user_api_key', val);
+  };
+
+  const handleImageApiKeyChange = (val: string) => {
+    setImageApiKey(val);
+    localStorage.setItem('gemini_image_api_key', val);
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -222,11 +237,16 @@ export default function App() {
           
           ANALYSIS MODE: ${analysisMode.toUpperCase()}
           Instruction for this mode: ${modeInstructions[analysisMode]}
+          
+          VISUAL CONSISTENCY FORMULA:
+          1. First, identify a "Visual Anchor" (the main subject, character, or specific location) that remains constant.
+          2. Define a "Style Key" (lighting, camera lens, color palette, artistic style).
+          3. For EVERY scene's "imagePrompt", you MUST start with the same Visual Anchor and Style Key description to ensure consistency across the generated images.
   
           For each scene, provide a JSON object with these keys:
           - "timestamp": A timestamp (approximate).
           - "description": A brief description of what changed.
-          - "imagePrompt": A highly detailed text-to-image prompt that would recreate this specific scene visually.
+          - "imagePrompt": A highly detailed text-to-image prompt. Start with the consistent Visual Anchor and Style Key.
           - "changeType": The type of change (e.g., "Initial State", "Transformation", "Final Result").
           - "indonesianTranslation": A natural Indonesian translation of the imagePrompt.
           - "transformationPrompt": (For all except last scene) A VERY CONCISE image-to-video transformation prompt (max 20 words) describing the action between this scene and the next.
@@ -243,12 +263,17 @@ export default function App() {
         contents.push({
           text: `Analyze this video ${videoUrl ? `from this link: ${videoUrl}` : ''} and create a professional ${clipCount}-scene text-to-video storyboard.
           
+          VISUAL CONSISTENCY FORMULA:
+          1. Identify the core protagonist/subject and the environment.
+          2. Define a consistent cinematic style (e.g., "Cinematic 35mm, moody lighting, teal and orange color grade").
+          3. Every "imagePrompt" must reuse these core descriptions.
+          
           The storyboard should capture the essence of the video but be optimized for high-end AI video generation tools (Runway Gen-3, Luma, Pika).
           
           For each scene, provide a JSON object with these keys:
           - "timestamp": A scene number or timestamp (e.g., "Scene 1" or "00:05").
           - "description": A brief description of the cinematic action.
-          - "imagePrompt": A highly detailed text-to-video prompt (optimized for tools like Runway/Luma) describing visual style, lighting, camera movement, and subject action. 
+          - "imagePrompt": A highly detailed text-to-video prompt. Start with the consistent subject and style descriptions.
             PENTING: Gabungkan instruksi transisi atau pergerakan kamera menuju adegan berikutnya langsung ke dalam "imagePrompt" ini sehingga menjadi satu prompt utuh yang mencakup aksi adegan dan transisi ke klip selanjutnya.
           - "changeType": The type of scene (e.g., "Opening", "Climax", "Resolution").
           - "indonesianTranslation": A natural Indonesian translation of the imagePrompt.
@@ -355,10 +380,22 @@ export default function App() {
     }
   };
 
+  const downloadImage = (url: string, index: number) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `scene_${index + 1}_image.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const getApiKey = () => (userApiKey || import.meta.env.VITE_GEMINI_API_KEY || "").trim();
+  const getImageApiKey = () => (imageApiKey || getApiKey()).trim();
+
   const generateImage = async (prompt: string, index: number) => {
-    const apiKey = (userApiKey || import.meta.env.VITE_GEMINI_API_KEY || "").trim();
+    const apiKey = getImageApiKey();
     if (!apiKey) {
-      setError("API Key belum diisi. Silakan masukkan API Key Gemini Anda di kolom pengaturan.");
+      setError("API Key Gambar belum diisi. Silakan masukkan API Key Gemini khusus gambar di kolom nomor 4 atau di pengaturan utama.");
       return;
     }
 
@@ -387,6 +424,28 @@ export default function App() {
       setError("Gagal membuat gambar. Pastikan API Key Anda mendukung model gemini-2.5-flash-image.");
     } finally {
       setGeneratingImageIndex(null);
+    }
+  };
+
+  const generateAllImages = async () => {
+    if (!result) return;
+    const apiKey = getImageApiKey();
+    if (!apiKey) {
+      setError("API Key Gambar belum diisi.");
+      return;
+    }
+
+    setIsGeneratingAll(true);
+    try {
+      for (let i = 0; i < result.scenes.length; i++) {
+        if (!generatedImages[i]) {
+          await generateImage(result.scenes[i].imagePrompt, i);
+          // Small delay to respect rate limits (15 RPM)
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    } finally {
+      setIsGeneratingAll(false);
     }
   };
 
@@ -733,6 +792,41 @@ export default function App() {
               <h2 className="text-xs font-mono text-zinc-500 uppercase flex items-center gap-2">
                 <ImageIcon className="w-4 h-4" /> 4. Text to Image (Powerful)
               </h2>
+
+              {/* Dedicated Image API Key */}
+              <div className="space-y-2 p-3 bg-zinc-900/30 rounded-xl border border-zinc-800/50">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-2">
+                    <Key className="w-3 h-3" /> API Key Khusus Gambar
+                  </label>
+                  <a 
+                    href="https://aistudio.google.com/app/apikey" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[9px] font-mono text-emerald-500 hover:underline flex items-center gap-1"
+                  >
+                    GET KEY <ExternalLink className="w-2 h-2" />
+                  </a>
+                </div>
+                <div className="relative">
+                  <input 
+                    type={showImageApiKey ? "text" : "password"}
+                    value={imageApiKey}
+                    onChange={(e) => handleImageApiKeyChange(e.target.value)}
+                    placeholder="Masukkan API Key khusus gambar..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500/50 transition-colors pr-8"
+                  />
+                  <button 
+                    onClick={() => setShowImageApiKey(!showImageApiKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400"
+                  >
+                    {showImageApiKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  </button>
+                </div>
+                <p className="text-[8px] text-zinc-600 italic">
+                  *Kosongkan jika ingin menggunakan API Key utama di atas.
+                </p>
+              </div>
               
               <div className="space-y-3">
                 <label className="text-[10px] font-mono text-zinc-600 uppercase">Resolusi Gambar</label>
@@ -788,8 +882,16 @@ export default function App() {
                       </h3>
                       <div className="flex gap-2">
                          <button 
+                           onClick={generateAllImages}
+                           disabled={isGeneratingAll || generatingImageIndex !== null}
+                           className="flex items-center gap-2 px-3 py-1 rounded bg-emerald-500/10 text-[10px] font-mono text-emerald-500 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20 disabled:opacity-50"
+                         >
+                           {isGeneratingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                           GENERATE ALL IMAGES
+                         </button>
+                         <button 
                            onClick={handleDownload}
-                           className="flex items-center gap-2 px-3 py-1 rounded bg-emerald-500/10 text-[10px] font-mono text-emerald-500 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
+                           className="flex items-center gap-2 px-3 py-1 rounded bg-zinc-800 text-[10px] font-mono text-zinc-400 hover:bg-zinc-700 transition-colors border border-zinc-700"
                          >
                            <Download className="w-3 h-3" /> DOWNLOAD (.TXT)
                          </button>
@@ -858,16 +960,43 @@ export default function App() {
                                       </div>
                                     </div>
 
-                                    <div className="space-y-4">
-                                      <div className="aspect-video glass-panel overflow-hidden relative group/img">
-                                        {generatedImages[idx] ? (
-                                          <img 
-                                            src={generatedImages[idx]} 
-                                            alt={`Generated for scene ${idx + 1}`}
-                                            className="w-full h-full object-cover"
-                                            referrerPolicy="no-referrer"
-                                          />
-                                        ) : (
+                                      <div className="space-y-4">
+                                        <div className="aspect-video glass-panel overflow-hidden relative group/img border border-zinc-800 hover:border-emerald-500/50 transition-all">
+                                          {generatedImages[idx] ? (
+                                            <>
+                                              <img 
+                                                src={generatedImages[idx]} 
+                                                alt={`Generated for scene ${idx + 1}`}
+                                                className="w-full h-full object-cover cursor-pointer"
+                                                referrerPolicy="no-referrer"
+                                                onClick={() => setPreviewImage(generatedImages[idx])}
+                                              />
+                                              {/* Action Overlay - Always visible on small screens, hover on large */}
+                                              <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-100 lg:opacity-0 lg:group-hover/img:opacity-100 transition-opacity">
+                                                <button 
+                                                  onClick={() => setPreviewImage(generatedImages[idx])}
+                                                  className="w-8 h-8 rounded-lg bg-black/60 backdrop-blur text-white flex items-center justify-center hover:bg-emerald-500 transition-colors border border-white/10"
+                                                  title="Preview Image"
+                                                >
+                                                  <Maximize2 className="w-4 h-4" />
+                                                </button>
+                                                <button 
+                                                  onClick={() => downloadImage(generatedImages[idx], idx)}
+                                                  className="w-8 h-8 rounded-lg bg-black/60 backdrop-blur text-white flex items-center justify-center hover:bg-emerald-500 transition-colors border border-white/10"
+                                                  title="Download Image"
+                                                >
+                                                  <Download className="w-4 h-4" />
+                                                </button>
+                                                <button 
+                                                  onClick={() => generateImage(scene.imagePrompt, idx)}
+                                                  className="w-8 h-8 rounded-lg bg-black/60 backdrop-blur text-white flex items-center justify-center hover:bg-emerald-500 transition-colors border border-white/10"
+                                                  title="Regenerate Image"
+                                                >
+                                                  <RefreshCw className="w-4 h-4" />
+                                                </button>
+                                              </div>
+                                            </>
+                                          ) : (
                                           <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900/50 text-zinc-600">
                                             {generatingImageIndex === idx ? (
                                               <div className="flex flex-col items-center gap-2">
@@ -994,6 +1123,57 @@ export default function App() {
           </div>
         </footer>
       </div>
+
+      {/* Image Preview Modal */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-12 bg-black/90 backdrop-blur-sm"
+            onClick={() => setPreviewImage(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-5xl w-full aspect-video glass-panel overflow-hidden border-zinc-700 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img 
+                src={previewImage} 
+                alt="Preview" 
+                className="w-full h-full object-contain"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute top-4 right-4 flex gap-2">
+                <button 
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = previewImage;
+                    link.download = `vidilapse_preview.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="p-3 rounded-full bg-emerald-500 text-white hover:scale-110 transition-transform shadow-lg"
+                  title="Download"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => setPreviewImage(null)}
+                  className="p-3 rounded-full bg-zinc-800 text-white hover:bg-zinc-700 transition-colors border border-zinc-700 shadow-lg"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
