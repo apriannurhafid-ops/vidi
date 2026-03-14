@@ -240,16 +240,16 @@ export default function App() {
           
           VISUAL CONSISTENCY FORMULA:
           1. First, identify a "Visual Anchor" (the main subject, character, or specific location) that remains constant.
-          2. Define a "Style Key" (hyper-realistic cinematic film style, 8k resolution, highly detailed textures, professional lighting, photorealistic).
-          3. For EVERY scene's "imagePrompt", you MUST start with the same Visual Anchor and Style Key description to ensure consistency across the generated images.
+          2. Define a "Style Key" (Hyper-realistic cinematic film, shot on 35mm lens, f/1.8, deep depth of field, natural skin textures, photorealistic, 8k, highly detailed. AVOID: 3D render, animation, cartoon, CGI, plastic look).
+          3. For EVERY scene's "imagePrompt", you MUST start with the same Visual Anchor and Style Key description to ensure consistency across the generated images. Keep descriptions concise but powerful.
   
           For each scene, provide a JSON object with these keys:
           - "timestamp": A timestamp (approximate).
           - "description": A brief description of what changed.
-          - "imagePrompt": A highly detailed text-to-image prompt. Start with the consistent Visual Anchor and Style Key. Focus on realism.
+          - "imagePrompt": A highly detailed text-to-image prompt. Start with the consistent Visual Anchor and Style Key. Focus on extreme realism and lifelike details.
           - "changeType": The type of change (e.g., "Initial State", "Transformation", "Final Result").
           - "indonesianTranslation": A natural Indonesian translation of the imagePrompt.
-          - "transformationPrompt": (For all except last scene) A VERY CONCISE image-to-video transformation prompt (max 20 words) describing the action between this scene and the next.
+          - "transformationPrompt": (For all except last scene) A VERY CONCISE image-to-video transformation prompt (max 30 words) describing the dynamic action between this scene and the next. Focus purely on the motion/change, avoid repeating the visual anchor or style key.
           - "transformationIndonesianTranslation": A natural Indonesian translation of the transformationPrompt.
           
           PENTING: Berikan 'title' dan 'summary' dalam Bahasa Indonesia.
@@ -265,16 +265,16 @@ export default function App() {
           
           VISUAL CONSISTENCY FORMULA:
           1. Identify the core protagonist/subject and the environment.
-          2. Define a consistent cinematic style (e.g., "Hyper-realistic 8k cinematic film, moody professional lighting, teal and orange color grade, photorealistic textures").
-          3. Every "imagePrompt" must reuse these core descriptions.
+          2. Define a consistent cinematic style (e.g., "Hyper-realistic 8k cinematic film, shot on ARRI Alexa, natural lighting, photorealistic skin textures, 35mm lens. AVOID: 3D, animation, CGI, cartoon, digital art look").
+          3. Every "imagePrompt" must reuse these core descriptions concisely.
           
           The storyboard should capture the essence of the video but be optimized for high-end AI video generation tools (Runway Gen-3, Luma, Pika).
           
           For each scene, provide a JSON object with these keys:
           - "timestamp": A scene number or timestamp (e.g., "Scene 1" or "00:05").
           - "description": A brief description of the cinematic action.
-          - "imagePrompt": A highly detailed text-to-video prompt. Start with the consistent subject and style descriptions. Focus on hyper-realism.
-            PENTING: Gabungkan instruksi transisi atau pergerakan kamera menuju adegan berikutnya langsung ke dalam "imagePrompt" ini sehingga menjadi satu prompt utuh yang mencakup aksi adegan dan transisi ke klip selanjutnya.
+          - "imagePrompt": A highly detailed text-to-video prompt. Start with the consistent subject and style descriptions. Focus on hyper-realism and lifelike quality.
+            PENTING: Gabungkan instruksi transisi atau pergerakan kamera menuju adegan berikutnya secara SINGKAT (max 30 kata tambahan) langsung ke dalam "imagePrompt" ini sehingga menjadi satu prompt utuh yang efisien. Hindari pengulangan kata yang tidak perlu.
           - "changeType": The type of scene (e.g., "Opening", "Climax", "Resolution").
           - "indonesianTranslation": A natural Indonesian translation of the imagePrompt.
           
@@ -403,58 +403,35 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey });
       
-      // Try with the high-quality model first
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-image-preview',
-          contents: [{ parts: [{ text: prompt }] }],
-          config: {
-            imageConfig: {
-              aspectRatio: imageAspectRatio,
-              imageSize: "1K"
-            }
-          }
-        });
-
-        let found = false;
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) {
-            const imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-            setGeneratedImages(prev => ({ ...prev, [index]: imageUrl }));
-            found = true;
-            break;
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-image-preview',
+        contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          imageConfig: {
+            aspectRatio: imageAspectRatio,
+            imageSize: "1K"
           }
         }
-        if (found) return;
-      } catch (innerErr: any) {
-        // If permission denied or model not found, fallback to 2.5-flash-image
-        console.warn("High-quality model failed, trying fallback...", innerErr);
-        
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: [{ parts: [{ text: prompt }] }],
-          config: {
-            imageConfig: {
-              aspectRatio: imageAspectRatio
-            }
-          }
-        });
+      });
 
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) {
-            const imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-            setGeneratedImages(prev => ({ ...prev, [index]: imageUrl }));
-            break;
-          }
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          const imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+          setGeneratedImages(prev => ({ ...prev, [index]: imageUrl }));
+          break;
         }
       }
     } catch (err: any) {
       console.error(err);
       let msg = "Gagal memanggil Gemini API. ";
-      if (err.message?.includes("permission denied")) {
+      const errStr = err.message || String(err);
+      
+      if (errStr.includes("permission denied")) {
         msg += "Akses ditolak (Permission Denied). Ini biasanya terjadi karena API Key Anda belum diizinkan menggunakan model Image Generation atau region Anda belum didukung. Pastikan 'Image Generation' aktif di Google AI Studio.";
+      } else if (errStr.includes("429") || errStr.includes("quota") || errStr.includes("RESOURCE_EXHAUSTED")) {
+        msg = "Kuota API Terlampaui (429). Anda telah mencapai batas penggunaan gratis untuk pembuatan gambar. Silakan tunggu beberapa saat (biasanya 1 menit) atau coba lagi besok. Anda juga bisa menggunakan API Key lain jika punya.";
       } else {
-        msg += err.message || "Silakan coba lagi.";
+        msg += errStr || "Silakan coba lagi.";
       }
       setError(msg);
     } finally {
@@ -1068,7 +1045,7 @@ export default function App() {
                                         </div>
                                       </div>
                                       <p className="text-[9px] text-zinc-500 text-center italic">
-                                        *Gambar dibuat menggunakan Gemini Flash Image (Gratis/Terintegrasi)
+                                        *Gambar dibuat menggunakan Gemini 3.1 Flash Image (Nano Banana 2)
                                       </p>
                                     </div>
                                   </div>
