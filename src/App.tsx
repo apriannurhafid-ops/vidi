@@ -79,6 +79,7 @@ export default function App() {
   const [textReference, setTextReference] = useState<string>(''); // Keep for backward compatibility if needed
   const [generatedImages, setGeneratedImages] = useState<Record<number, string>>({});
   const [generatingImageIndex, setGeneratingImageIndex] = useState<number | null>(null);
+  const [imageAspectRatio, setImageAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
   
   // Usage Tracking States
   const [usageStats, setUsageStats] = useState({
@@ -367,6 +368,11 @@ export default function App() {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          imageConfig: {
+            aspectRatio: imageAspectRatio
+          }
+        }
       });
 
       for (const part of response.candidates[0].content.parts) {
@@ -720,6 +726,37 @@ export default function App() {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* 4. Text to Image Settings */}
+            <div className="glass-panel p-6 space-y-6">
+              <h2 className="text-xs font-mono text-zinc-500 uppercase flex items-center gap-2">
+                <ImageIcon className="w-4 h-4" /> 4. Text to Image (Powerful)
+              </h2>
+              
+              <div className="space-y-3">
+                <label className="text-[10px] font-mono text-zinc-600 uppercase">Resolusi Gambar</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['16:9', '9:16', '1:1'] as const).map((ratio) => (
+                    <button
+                      key={ratio}
+                      onClick={() => setImageAspectRatio(ratio)}
+                      className={cn(
+                        "py-3 px-2 rounded-xl border text-[10px] font-mono uppercase transition-all flex flex-col items-center gap-2",
+                        imageAspectRatio === ratio 
+                          ? "bg-emerald-500/10 border-emerald-500 text-emerald-500" 
+                          : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700"
+                      )}
+                    >
+                      <LayoutGrid className={cn("w-4 h-4", imageAspectRatio === ratio ? "text-emerald-500" : "text-zinc-600")} />
+                      {ratio}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-zinc-500 italic mt-2">
+                  *Pilih resolusi sebelum menekan tombol "Generate Image" pada hasil analisis.
+                </p>
+              </div>
             </div>
 
             {error && (
