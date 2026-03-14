@@ -77,6 +77,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [textReference, setTextReference] = useState<string>(''); // Keep for backward compatibility if needed
+  const [generatedImages, setGeneratedImages] = useState<Record<number, string>>({});
+  const [generatingImageIndex, setGeneratingImageIndex] = useState<number | null>(null);
   
   // Usage Tracking States
   const [usageStats, setUsageStats] = useState({
@@ -349,6 +351,36 @@ export default function App() {
       setTimeout(() => setCopiedIndex(null), 2000);
     } catch (err) {
       console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const generateImage = async (prompt: string, index: number) => {
+    const apiKey = (userApiKey || import.meta.env.VITE_GEMINI_API_KEY || "").trim();
+    if (!apiKey) {
+      setError("API Key belum diisi. Silakan masukkan API Key Gemini Anda di kolom pengaturan.");
+      return;
+    }
+
+    setGeneratingImageIndex(index);
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: [{ parts: [{ text: prompt }] }],
+      });
+
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          const imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+          setGeneratedImages(prev => ({ ...prev, [index]: imageUrl }));
+          break;
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError("Gagal membuat gambar. Pastikan API Key Anda mendukung model gemini-2.5-flash-image.");
+    } finally {
+      setGeneratingImageIndex(null);
     }
   };
 
@@ -755,36 +787,79 @@ export default function App() {
                                   </span>
                                 </div>
                                 
-                                  <div className="space-y-4">
-                                    <div className="space-y-2">
-                                      <p className="text-zinc-200 text-sm font-medium leading-snug">{scene.description}</p>
-                                      <div className="bg-black/40 rounded-lg p-3 border border-zinc-800 group-hover:border-zinc-700 transition-colors relative">
-                                        <div className="flex items-start gap-3">
-                                          <ImageIcon className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0" />
-                                          <p className="text-zinc-400 text-[11px] italic leading-relaxed pr-8">
-                                            "{scene.imagePrompt}"
-                                          </p>
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="space-y-4">
+                                      <div className="space-y-2">
+                                        <p className="text-zinc-200 text-sm font-medium leading-snug">{scene.description}</p>
+                                        <div className="bg-black/40 rounded-lg p-3 border border-zinc-800 group-hover:border-zinc-700 transition-colors relative">
+                                          <div className="flex items-start gap-3">
+                                            <ImageIcon className="w-4 h-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                                            <p className="text-zinc-400 text-[11px] italic leading-relaxed pr-8">
+                                              "{scene.imagePrompt}"
+                                            </p>
+                                          </div>
+                                          <button 
+                                            onClick={() => handleCopy(scene.imagePrompt, idx)}
+                                            className="absolute top-3 right-3 text-zinc-500 hover:text-emerald-400 transition-colors"
+                                            title="Copy Prompt"
+                                          >
+                                            {copiedIndex === idx ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                          </button>
                                         </div>
-                                        <button 
-                                          onClick={() => handleCopy(scene.imagePrompt, idx)}
-                                          className="absolute top-3 right-3 text-zinc-500 hover:text-emerald-400 transition-colors"
-                                          title="Copy Prompt"
-                                        >
-                                          {copiedIndex === idx ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                                        </button>
+                                      </div>
+
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500 uppercase">
+                                          <Languages className="w-2.5 h-2.5" /> Terjemahan
+                                        </div>
+                                        <textarea
+                                          value={scene.indonesianTranslation}
+                                          onChange={(e) => handleTranslationChange(idx, e.target.value)}
+                                          className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-2.5 text-[11px] text-zinc-300 focus:outline-none focus:border-emerald-500/50 transition-colors resize-none min-h-[50px]"
+                                          placeholder="Terjemahan bahasa Indonesia..."
+                                        />
                                       </div>
                                     </div>
 
-                                    <div className="space-y-1.5">
-                                      <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500 uppercase">
-                                        <Languages className="w-2.5 h-2.5" /> Terjemahan
+                                    <div className="space-y-4">
+                                      <div className="aspect-video glass-panel overflow-hidden relative group/img">
+                                        {generatedImages[idx] ? (
+                                          <img 
+                                            src={generatedImages[idx]} 
+                                            alt={`Generated for scene ${idx + 1}`}
+                                            className="w-full h-full object-cover"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900/50 text-zinc-600">
+                                            {generatingImageIndex === idx ? (
+                                              <div className="flex flex-col items-center gap-2">
+                                                <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+                                                <span className="text-[10px] font-mono uppercase animate-pulse">Generating...</span>
+                                              </div>
+                                            ) : (
+                                              <>
+                                                <ImageIcon className="w-8 h-8 mb-2 opacity-20" />
+                                                <span className="text-[10px] font-mono uppercase">No Image Generated</span>
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                        
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                          <button
+                                            onClick={() => generateImage(scene.imagePrompt, idx)}
+                                            disabled={generatingImageIndex !== null}
+                                            className="bg-emerald-500 text-black px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                          >
+                                            {generatingImageIndex === idx ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                            {generatedImages[idx] ? 'REGENERATE IMAGE' : 'GENERATE IMAGE'}
+                                          </button>
+                                        </div>
                                       </div>
-                                      <textarea
-                                        value={scene.indonesianTranslation}
-                                        onChange={(e) => handleTranslationChange(idx, e.target.value)}
-                                        className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-2.5 text-[11px] text-zinc-300 focus:outline-none focus:border-emerald-500/50 transition-colors resize-none min-h-[50px]"
-                                        placeholder="Terjemahan bahasa Indonesia..."
-                                      />
+                                      <p className="text-[9px] text-zinc-500 text-center italic">
+                                        *Gambar dibuat menggunakan Gemini Flash Image (Gratis/Terintegrasi)
+                                      </p>
                                     </div>
                                   </div>
                                 
